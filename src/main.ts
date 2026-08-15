@@ -612,6 +612,18 @@ export default class ClaudianPlugin extends Plugin {
     }
   }
 
+  /**
+   * Resolve once every deferred (non-restored) conversation shell is loaded,
+   * kicking the background scan off immediately when it is still pending.
+   * Idempotent: a deployment that never defers resolves synchronously.
+   */
+  async awaitSessionMetadataReady(): Promise<void> {
+    if (this.pendingSessionMetadataScan) {
+      this.startRemainingSessionMetadataLoad();
+    }
+    await this.remainingSessionMetadataLoad?.catch(() => undefined);
+  }
+
   private startRemainingSessionMetadataLoad(): void {
     if (
       !this.pendingSessionMetadataScan

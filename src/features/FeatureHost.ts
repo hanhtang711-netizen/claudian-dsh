@@ -80,6 +80,9 @@ export interface FeatureHost {
   updateConversation(id: string, updates: Partial<Conversation>): Promise<void>;
   getConversationById(id: string): Promise<Conversation | null>;
   getCachedConversation(id: string): Conversation | null;
+
+  /** Resolve once every deferred (non-restored) conversation shell is loaded. */
+  awaitSessionMetadataReady(): Promise<void>;
   getConversationSync(id: string): Conversation | null;
   getConversationList(): ConversationMeta[];
 

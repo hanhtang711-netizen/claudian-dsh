@@ -2215,6 +2215,14 @@ export class ClaudianView extends ItemView {
       !this.isViewLifecycleCurrent(lifecycleRevision)
       || this.tabManager !== tabManager
     ) return;
+    // The deferred background metadata scan must adopt the non-restored
+    // conversations first; otherwise their tabs would be created as blank
+    // drafts (getCachedConversation misses) and lose their conversation id.
+    await this.plugin.awaitSessionMetadataReady();
+    if (
+      !this.isViewLifecycleCurrent(lifecycleRevision)
+      || this.tabManager !== tabManager
+    ) return;
     const openTabs = persistedState?.openTabs ?? [];
     if (openTabs.length > 0) {
       // Recreate every tab that was open, then activate the persisted one.
