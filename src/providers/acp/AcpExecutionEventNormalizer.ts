@@ -1,3 +1,6 @@
+import { randomUUID } from 'node:crypto';
+
+import { TOOL_TODO_WRITE } from '../../core/tools/toolNames';
 import type {
   ProviderAssistantMessageStartedEvent,
   ProviderNoticeEvent,
@@ -66,6 +69,8 @@ export interface AcpExecutionNormalizationResult {
 export class AcpExecutionEventNormalizer {
   private disposed = false;
   private readonly normalizer = new AcpSessionUpdateNormalizer();
+  /** Stable synthetic toolCallId for ACP `plan` updates (TodoWrite bridge). */
+  private planToolCallId: string | null = null;
   private sequence = 0;
 
   constructor(private readonly options: AcpExecutionEventNormalizerOptions) {}
@@ -155,6 +160,33 @@ export class AcpExecutionEventNormalizer {
               return [];
           }
         });
+      case 'plan': {
+        // ACP plan updates carry a whole-list todo snapshot; project it onto
+        // the shared TodoWrite machinery so the todo panel updates like any
+        // Claude Code TodoWrite call. The synthetic id is stable per run, so
+        // later snapshots merge into the same tool card instead of stacking.
+        this.planToolCallId ??= `acp-plan-${randomUUID()}`;
+        const toolCallId = this.planToolCallId;
+        const todos = (normalized.plan.entries ?? []).map((entry) => ({
+          activeForm: entry.content,
+          content: entry.content,
+          status: entry.status,
+        }));
+        return [{
+          input: { todos },
+          name: TOOL_TODO_WRITE,
+          scope: this.nextScope(),
+          toolCallId,
+          toolScope: { kind: 'main' },
+          type: 'tool_started' as const,
+        }, {
+          content: '',
+          scope: this.nextScope(),
+          toolCallId,
+          toolScope: { kind: 'main' },
+          type: 'tool_completed' as const,
+        }];
+      }
       case 'tool_call':
       case 'tool_call_update': {
         const update = normalized.type === 'tool_call'

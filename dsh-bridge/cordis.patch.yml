@@ -1,0 +1,110 @@
+# dsh-claudian-bridge bundle patch: the ACP stdio server over dsh-base.
+# The persona row is cleared so each bridge session registers the
+# Claudian-written system.md as its scoped `deployment:persona` section.
+# Headless parity rows (hmr off, tools mode, code-runtime) keep the `code`
+# preset mountable, and the agent-plane rows are disabled exactly like the
+# Web bundle does, so each session's tools, prompts, plan mode, and skills
+# come from its DSH agent preset (standard/minimal/code/cordis).
+
+- id: system-prompt
+  config:
+    persona: ''
+
+- id: hmr
+  disabled: true
+
+- id: tools
+  config:
+    # Keep the same temporary process-wide Code Mode opt-in as the Web surface.
+    mode: !!js process.env.DSH_TOOLS_MODE
+
+# ── the agent plane moves behind agent presets (Web parity) ────────────────
+
+- id: tool-bash
+  disabled: true
+
+- id: tool-pwsh
+  disabled: true
+
+- id: tool-jobs
+  disabled: true
+
+- id: tool-fs
+  disabled: true
+
+- id: tool-fs-search
+  disabled: true
+
+- id: tool-str-replace-editor
+  disabled: true
+
+- id: skill-filesystem
+  disabled: true
+
+- id: tool-skill
+  disabled: true
+
+- id: tool-goal
+  disabled: true
+
+- id: plan-mode
+  disabled: true
+
+- id: compaction-basic
+  disabled: true
+
+- id: command-compact
+  disabled: true
+
+- id: tool-result-pruner
+  disabled: true
+
+- id: tool-subagent-control
+  disabled: true
+
+- id: tool-subagent-list-agents
+  disabled: true
+
+- id: tool-subagent
+  disabled: true
+
+- id: tool-subagent-fork
+  disabled: true
+
+- id: workflow-worker-thread
+  disabled: true
+
+- id: tool-workflow
+  disabled: true
+
+- id: tool-ralph
+  disabled: true
+
+- id: agent-instructions
+  disabled: true
+
+- id: tool-todo
+  disabled: true
+
+- id: tool-web
+  disabled: true
+
+- insert:
+    # Code Mode is a core execution capability, not a Web component.
+    - id: code-runtime
+      name: '@deepseek-ai/dsh-code-runtime-worker-thread'
+
+    - id: agent-presets
+      name: '@deepseek-ai/dsh-agent-presets'
+      config:
+        default: standard
+
+    # Parses `--config <path>` and publishes it for the server below.
+    - id: bridge-startup
+      name: 'dsh-claudian-bridge/startup'
+
+    # The ACP server: owns agents/sessions, streams session/update,
+    # and forwards approval asks to the client.
+    - id: bridge-acp
+      name: 'dsh-claudian-bridge'
+      inject: [bridgeStartup]

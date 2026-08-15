@@ -1,5 +1,9 @@
 # Claudian
 
+> **本仓库是 [YishenTu/claudian](https://github.com/YishenTu/claudian) 的 fork（base: v2.1.3 `e707f1c`）**，新增 **DeepSeek Harness（DSH）** 作为第五个聊天引擎（`claude`/`codex`/`grok`/`opencode`/`pi` → +`dsh`），并修复了两个通用的 ACP 集成缺口。全部改动说明与安装步骤见 **[docs/DSH_INTEGRATION.md](docs/DSH_INTEGRATION.md)**。
+>
+> This fork adds DeepSeek Harness as a new ACP chat provider, plus two generic ACP integration fixes. See [docs/DSH_INTEGRATION.md](docs/DSH_INTEGRATION.md). Everything below is the upstream README.
+
 <p>
   <a href="https://trendshift.io/repositories/21115?utm_source=repository-badge&amp;utm_medium=badge&amp;utm_campaign=badge-repository-21115">
     <img align="right" src="https://trendshift.io/api/badge/repositories/21115" alt="Claudian on Trendshift" width="180">

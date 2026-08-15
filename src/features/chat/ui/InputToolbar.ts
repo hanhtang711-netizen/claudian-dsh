@@ -170,6 +170,7 @@ export class ModeSelector {
   private container: HTMLElement;
   private labelEl: HTMLElement | null = null;
   private toggleEl: HTMLElement | null = null;
+  private selectEl: HTMLSelectElement | null = null;
   private callbacks: ToolbarCallbacks;
 
   constructor(parentEl: HTMLElement, callbacks: ToolbarCallbacks) {
@@ -187,6 +188,19 @@ export class ModeSelector {
 
     this.labelEl = this.container.createSpan({ cls: 'claudian-mode-label' });
     this.toggleEl = this.container.createDiv({ cls: 'claudian-toggle-switch' });
+
+    // Providers with more than two modes get a dropdown instead of the
+    // binary toggle (e.g. the dsh agent presets).
+    this.selectEl = this.container.createEl('select', { cls: 'claudian-mode-select' });
+    this.selectEl.addClass('claudian-hidden');
+    this.selectEl.addEventListener('change', () => {
+      const value = this.selectEl?.value;
+      if (!value) return;
+      runToolbarAction(async () => {
+        await this.callbacks.onModeChange(value);
+        this.updateDisplay();
+      }, 'Failed to change mode');
+    });
 
     this.toggleEl.addEventListener('click', () => {
       runToolbarAction(() => this.toggle(), 'Failed to change mode');
@@ -208,16 +222,41 @@ export class ModeSelector {
   }
 
   updateDisplay() {
-    if (!this.toggleEl || !this.labelEl) {
+    if (!this.toggleEl || !this.labelEl || !this.selectEl) {
       return;
     }
 
     const selectorConfig = this.getSelectorConfig();
-    if (!selectorConfig || selectorConfig.options.length !== 2) {
+    const optionCount = selectorConfig?.options.length ?? 0;
+    if (!selectorConfig || optionCount < 2) {
       this.container.addClass('claudian-hidden');
       return;
     }
 
+    if (optionCount > 2) {
+      // Dropdown mode: show every option in a native select.
+      this.container.removeClass('claudian-hidden');
+      this.toggleEl.addClass('claudian-hidden');
+      this.selectEl.removeClass('claudian-hidden');
+      this.labelEl.setText(selectorConfig.label);
+      this.labelEl.removeClass('active');
+      this.selectEl.empty();
+      for (const option of selectorConfig.options) {
+        const optionEl = this.selectEl.createEl('option', {
+          text: option.label,
+          value: option.value,
+        });
+        if (option.description) {
+          optionEl.title = option.description;
+        }
+      }
+      this.selectEl.value = selectorConfig.value;
+      this.container.setAttribute('title', selectorConfig.label);
+      return;
+    }
+
+    // Binary toggle mode.
+    this.selectEl.addClass('claudian-hidden');
     this.container.removeClass('claudian-hidden');
     const { active, inactive } = this.resolveOptionPair(selectorConfig);
     const currentOption = selectorConfig.options.find((option) => option.value === selectorConfig.value)
