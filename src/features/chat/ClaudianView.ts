@@ -2215,11 +2215,20 @@ export class ClaudianView extends ItemView {
       !this.isViewLifecycleCurrent(lifecycleRevision)
       || this.tabManager !== tabManager
     ) return;
-    const currentTab = persistedState?.openTabs.find(
-      tab => tab.tabId === persistedState.activeTabId,
-    );
-    if (currentTab) {
-      await tabManager.createTab(currentTab.conversationId, currentTab.tabId);
+    const openTabs = persistedState?.openTabs ?? [];
+    if (openTabs.length > 0) {
+      // Recreate every tab that was open, then activate the persisted one.
+      for (const tab of openTabs) {
+        await tabManager.createTab(tab.conversationId, tab.tabId, {
+          activate: false,
+        });
+      }
+      const activeId = persistedState?.activeTabId;
+      const targetTabId = activeId
+        && openTabs.some(tab => tab.tabId === activeId)
+        ? activeId
+        : openTabs[0].tabId;
+      await tabManager.switchToTab(targetTabId);
       return;
     }
 
@@ -2227,7 +2236,7 @@ export class ClaudianView extends ItemView {
   }
 
   private persistCurrentTabState(
-    tabManager: Pick<TabManager, 'getActiveTab'> | null = this.tabManager,
+    tabManager: Pick<TabManager, 'getActiveTab' | 'getOpenTabs'> | null = this.tabManager,
     persistence: Pick<TabStatePersistenceCoordinator, 'update'> | null = this.tabStatePersistence,
   ): void {
     const state = this.getPersistedCurrentTabState(tabManager);
@@ -2235,23 +2244,23 @@ export class ClaudianView extends ItemView {
   }
 
   getPersistedCurrentTabState(
-    tabManager: Pick<TabManager, 'getActiveTab'> | null = this.tabManager,
+    tabManager: Pick<TabManager, 'getActiveTab' | 'getOpenTabs'> | null = this.tabManager,
   ): AppTabManagerState | null {
-    const activeTab = tabManager?.getActiveTab();
-    if (!activeTab) return null;
+    const tabs = tabManager?.getOpenTabs() ?? [];
+    if (tabs.length === 0) return null;
 
     return {
-      openTabs: [{
-        tabId: activeTab.id,
-        conversationId: activeTab.conversationId,
-      }],
-      activeTabId: activeTab.id,
+      openTabs: tabs.map(tab => ({
+        tabId: tab.id,
+        conversationId: tab.conversationId,
+      })),
+      activeTabId: tabManager?.getActiveTab()?.id ?? null,
     };
   }
 
   /** Flushes the current tab identity before view or plugin shutdown. */
   async flushCurrentTabState(
-    tabManager: Pick<TabManager, 'getActiveTab'> | null = this.tabManager,
+    tabManager: Pick<TabManager, 'getActiveTab' | 'getOpenTabs'> | null = this.tabManager,
     persistence: Pick<TabStatePersistenceCoordinator, 'flush' | 'update'> | null = (
       this.tabStatePersistence
     ),

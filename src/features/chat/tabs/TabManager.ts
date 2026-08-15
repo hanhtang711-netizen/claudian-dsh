@@ -135,6 +135,11 @@ export class TabManager implements TabManagerInterface {
   private view: TabManagerViewHost;
 
   private tabs: Map<TabId, AssembledTabRuntime> = new Map();
+
+  /** Snapshot of every live tab, for full workspace-state persistence. */
+  getOpenTabs(): AssembledTabRuntime[] {
+    return [...this.tabs.values()];
+  }
   private activeTabId: TabId | null = null;
   private callbacks: TabManagerCallbacks;
   private providerRuntimeCommandWarmups = new Map<TabId, ProviderCommandWarmupEntry>();
