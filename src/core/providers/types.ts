@@ -409,6 +409,24 @@ export interface ProviderTabWarmupPolicy {
   resolveMode(context: ProviderTabWarmupContext): ProviderTabWarmupMode;
 }
 
+export interface ProviderRateLimitWindow {
+  label: string;
+  remainingPercent: number;
+  usedPercent: number;
+  resetsAt: number | null;
+}
+
+export interface ProviderRateLimitState {
+  status: 'ready' | 'unavailable';
+  windows: ProviderRateLimitWindow[];
+}
+
+export interface ProviderRateLimitService {
+  read(signal?: AbortSignal): Promise<ProviderRateLimitState>;
+  subscribe(listener: (state: ProviderRateLimitState) => void): () => void;
+  refresh(signal?: AbortSignal): Promise<ProviderRateLimitState>;
+}
+
 export interface ProviderWorkspaceServices {
   commandCatalog?: ProviderCommandCatalog | null;
   vaultCommandRepository?: ProviderVaultEntryRepository | null;
@@ -417,6 +435,7 @@ export interface ProviderWorkspaceServices {
   commandLoader?: ProviderCommandLoader | null;
   tabWarmupPolicy?: ProviderTabWarmupPolicy | null;
   settingsTabRenderer?: ProviderSettingsTabRenderer | null;
+  rateLimitService?: ProviderRateLimitService | null;
   refreshAgentMentions?(context?: ProviderTransitionOwnerContext): Promise<void>;
   refreshModelCatalog?(
     context?: ProviderTransitionOwnerContext,

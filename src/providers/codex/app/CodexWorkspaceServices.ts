@@ -14,6 +14,7 @@ import { CodexSkillCatalog } from '../commands/CodexSkillCatalog';
 import { CodexCliResolver } from '../runtime/CodexCliResolver';
 import { CodexModelCatalogCoordinator } from '../runtime/CodexModelCatalogCoordinator';
 import { CodexModelDiscoveryService } from '../runtime/CodexModelDiscoveryService';
+import { CodexRateLimitService } from '../runtime/CodexRateLimitService';
 import { getCodexProviderSettings } from '../settings';
 import { CodexSkillListingService } from '../skills/CodexSkillListingService';
 import { CodexSubagentStorage } from '../storage/CodexSubagentStorage';
@@ -25,6 +26,7 @@ export interface CodexWorkspaceServices extends ProviderWorkspaceServices {
   agentMentionProvider: CodexAgentMentionProvider;
   cliResolver: ProviderCliResolver;
   modelCatalogCoordinator: CodexModelCatalogCoordinator;
+  rateLimitService: CodexRateLimitService;
   refreshModelCatalog(
     context?: ProviderTransitionOwnerContext,
   ): Promise<ProviderModelCatalogRefreshResult>;
@@ -56,6 +58,7 @@ export async function createCodexWorkspaceServices(
       new CodexModelDiscoveryService(plugin),
     );
   const commandCatalog = new CodexSkillCatalog(skillListProvider);
+  const rateLimitService = new CodexRateLimitService(plugin);
   const unregisterTransitionHook = plugin.executionLifecycleRegistry
     .registerTransitionHook('codex', {
       beforeTransition: async () => {
@@ -85,6 +88,7 @@ export async function createCodexWorkspaceServices(
     agentMentionProvider,
     cliResolver: createCodexCliResolver(),
     modelCatalogCoordinator,
+    rateLimitService,
     settingsTabRenderer: codexSettingsTabRenderer,
     refreshAgentMentions: async () => {
       await agentMentionProvider.loadAgents();

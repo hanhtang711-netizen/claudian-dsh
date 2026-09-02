@@ -9,6 +9,8 @@ import {
 } from '../../core/providers/conversationModel';
 import { ProviderRegistry } from '../../core/providers/ProviderRegistry';
 import { ProviderSettingsCoordinator } from '../../core/providers/ProviderSettingsCoordinator';
+import { ProviderWorkspaceRegistry } from '../../core/providers/ProviderWorkspaceRegistry';
+import type { ProviderRateLimitService, ProviderRateLimitState } from '../../core/providers/types';
 import { type AppTabManagerState, DEFAULT_CHAT_PROVIDER_ID, type ProviderId } from '../../core/providers/types';
 import { type ConversationMeta, VIEW_TYPE_CLAUDIAN } from '../../core/types';
 import {
@@ -68,6 +70,16 @@ export class ClaudianView extends ItemView {
   private inputNavRowHostEl: HTMLElement | null = null;
   private activeInputSlotEl: HTMLElement | null = null;
   private activeInputTabId: TabId | null = null;
+
+  // Codex rate-limit dashboard
+  private codexRateLimitDashboardEl: HTMLElement | null = null;
+  private codexRateLimitWindowsEl: HTMLElement | null = null;
+  private codexRateLimitRefreshButtonEl: HTMLButtonElement | null = null;
+  private codexRateLimitService: ProviderRateLimitService | null = null;
+  private codexRateLimitUnsubscribe: (() => void) | null = null;
+  private codexRateLimitAbortController: AbortController | null = null;
+  private codexRateLimitRefreshTimer: number | null = null;
+  private codexRateLimitReadRevision = 0;
 
   // DOM Elements
   private viewContainerEl: HTMLElement | null = null;
@@ -371,9 +383,11 @@ export class ClaudianView extends ItemView {
     this.updateInputLocation();
     this.updateTabBarVisibility();
     this.startSessionSidebarLayoutObserver();
+    this.startCodexRateLimitDashboard();
   }
 
   async onClose() {
+    this.stopCodexRateLimitDashboard();
     this.viewShutdownStarted = true;
     const lifecycleRevision = (this.viewLifecycleRevision ?? 0) + 1;
     this.viewLifecycleRevision = lifecycleRevision;
@@ -662,10 +676,134 @@ export class ClaudianView extends ItemView {
     if (!this.chatPanelEl) return;
 
     this.inputFooterEl = this.chatPanelEl.createDiv({ cls: 'claudian-input-footer' });
+    this.buildCodexRateLimitDashboard();
     this.inputNavRowHostEl = this.inputFooterEl.createDiv({
       cls: 'claudian-input-nav-row claudian-view-input-nav-row',
     });
     this.activeInputSlotEl = this.inputFooterEl.createDiv({ cls: 'claudian-active-input-slot' });
+  }
+
+  private buildCodexRateLimitDashboard(): void {
+    if (!this.inputFooterEl) return;
+    this.codexRateLimitDashboardEl = this.inputFooterEl.createDiv({
+      cls: 'claudian-codex-rate-limits',
+    });
+    const labelEl = this.codexRateLimitDashboardEl.createSpan({
+      cls: 'claudian-codex-rate-limits-label',
+      text: 'Codex 额度',
+    });
+    labelEl.setAttribute('aria-live', 'polite');
+    this.codexRateLimitWindowsEl = this.codexRateLimitDashboardEl.createDiv({
+      cls: 'claudian-codex-rate-limits-windows',
+    });
+    this.codexRateLimitRefreshButtonEl = this.codexRateLimitDashboardEl.createEl('button', {
+      cls: 'claudian-codex-rate-limits-refresh',
+      attr: { 'aria-label': '刷新 Codex 额度', type: 'button' },
+    });
+    setIcon(this.codexRateLimitRefreshButtonEl, 'refresh-cw');
+    this.codexRateLimitRefreshButtonEl.addEventListener('click', () => {
+      void this.refreshCodexRateLimits();
+    });
+    this.renderCodexRateLimitState({ status: 'unavailable', windows: [] });
+  }
+
+  private async startCodexRateLimitDashboard(): Promise<void> {
+    if (!this.codexRateLimitDashboardEl) return;
+    try {
+      await ProviderWorkspaceRegistry.ensureInitialized(this.plugin.providerHost, 'codex', 'rate-limits');
+    } catch {
+      return;
+    }
+    const service = ProviderWorkspaceRegistry.getIfInitialized('codex')?.rateLimitService;
+    if (!service || this.viewShutdownStarted) return;
+    this.codexRateLimitService = service;
+    this.codexRateLimitUnsubscribe = service.subscribe(state => {
+      this.renderCodexRateLimitState(state);
+    });
+    this.syncCodexRateLimitVisibility();
+    void this.refreshCodexRateLimits();
+    this.codexRateLimitRefreshTimer = window.setInterval(() => {
+      void this.refreshCodexRateLimits();
+    }, 60_000);
+  }
+
+  private stopCodexRateLimitDashboard(): void {
+    this.codexRateLimitReadRevision += 1;
+    this.codexRateLimitAbortController?.abort();
+    this.codexRateLimitAbortController = null;
+    if (this.codexRateLimitRefreshTimer !== null) {
+      window.clearInterval(this.codexRateLimitRefreshTimer);
+      this.codexRateLimitRefreshTimer = null;
+    }
+    this.codexRateLimitUnsubscribe?.();
+    this.codexRateLimitUnsubscribe = null;
+    this.codexRateLimitService = null;
+  }
+
+  private syncCodexRateLimitVisibility(): void {
+    if (!this.codexRateLimitDashboardEl) return;
+    // Keep the quota visible while using any provider: it is account-scoped Codex
+    // information, not a property of the active conversation tab.
+    this.codexRateLimitDashboardEl.toggleClass(
+      'claudian-hidden',
+      this.codexRateLimitService === null,
+    );
+  }
+
+  private async refreshCodexRateLimits(): Promise<void> {
+    if (!this.codexRateLimitService) return;
+    const revision = ++this.codexRateLimitReadRevision;
+    this.codexRateLimitAbortController?.abort();
+    const controller = new AbortController();
+    this.codexRateLimitAbortController = controller;
+    this.codexRateLimitRefreshButtonEl?.setAttribute('aria-busy', 'true');
+    try {
+      await this.codexRateLimitService.refresh(controller.signal);
+      if (revision !== this.codexRateLimitReadRevision || controller.signal.aborted) return;
+    } catch {
+      return;
+    } finally {
+      if (revision === this.codexRateLimitReadRevision) {
+        this.codexRateLimitAbortController = null;
+        this.codexRateLimitRefreshButtonEl?.removeAttribute('aria-busy');
+      }
+    }
+  }
+
+  private renderCodexRateLimitState(state: ProviderRateLimitState): void {
+    const container = this.codexRateLimitWindowsEl;
+    if (!container) return;
+    container.empty();
+    if (state.status !== 'ready') {
+      container.createSpan({
+        cls: 'claudian-codex-rate-limits-unavailable',
+        text: '暂不可读取',
+      });
+      return;
+    }
+    for (const window of state.windows) {
+      const item = container.createSpan({ cls: 'claudian-codex-rate-limit-window' });
+      const severity = window.remainingPercent <= 5
+        ? 'critical'
+        : window.remainingPercent <= 20 ? 'warning' : 'normal';
+      item.addClass(`claudian-codex-rate-limit-${severity}`);
+      // A momentarily saturated window reads better as "已满 · HH:MM 重置"
+      // than as a bare red "0%剩余", which users decode as "额度已用 100%".
+      if (window.remainingPercent <= 0 && window.resetsAt !== null) {
+        const resetTime = new Date(window.resetsAt * 1000).toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+        item.createSpan({ text: `${window.label} 已满 · ${resetTime}重置` });
+      } else {
+        item.createSpan({ text: `${window.label} 剩 ${window.remainingPercent}%` });
+      }
+      const titleParts = [`已用 ${window.usedPercent}%`];
+      if (window.resetsAt !== null) {
+        titleParts.push(`预计重置：${new Date(window.resetsAt * 1000).toLocaleString()}`);
+      }
+      item.title = titleParts.join(' · ');
+    }
   }
 
   private attachNavRowContentToInputFooter(): void {
@@ -812,6 +950,7 @@ export class ClaudianView extends ItemView {
     const activeTab = this.tabManager?.getActiveTab();
     const providerId = activeTab ? getTabProviderId(activeTab, this.plugin) : DEFAULT_CHAT_PROVIDER_ID;
     this.viewContainerEl.dataset.provider = providerId;
+    this.syncCodexRateLimitVisibility();
   }
 
   // ============================================

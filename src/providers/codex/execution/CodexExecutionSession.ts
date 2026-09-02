@@ -70,6 +70,7 @@ import type {
 import { CodexDynamicToolRegistry } from '../runtime/CodexDynamicToolRegistry';
 import type { CodexLaunchSpec } from '../runtime/codexLaunchTypes';
 import { CodexNotificationRouter } from '../runtime/CodexNotificationRouter';
+import { codexRateLimitStore } from '../runtime/CodexRateLimitStore';
 import {
   CodexRpcResponseError,
   CodexRpcTransport,
@@ -699,6 +700,7 @@ export class CodexExecutionSession
       'item/fileChange/patchUpdated',
       'rawResponseItem/completed',
       'event_msg',
+      'account/rateLimits/updated',
     ];
     for (const method of notificationMethods) {
       transport.onNotification(
@@ -753,6 +755,11 @@ export class CodexExecutionSession
         resolved.requestId,
         resolved.threadId,
       );
+      return;
+    }
+
+    if (method === 'account/rateLimits/updated') {
+      codexRateLimitStore.mergeFromPayload(params);
       return;
     }
 
