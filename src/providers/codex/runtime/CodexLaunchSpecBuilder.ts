@@ -15,7 +15,13 @@ export interface BuildCodexLaunchSpecOptions {
   resolveDefaultWslDistro?: () => string | undefined;
 }
 
-const CODEX_APP_SERVER_ARGS = Object.freeze(['app-server', '--listen', 'stdio://']);
+const CODEX_APP_SERVER_ARGS = Object.freeze([
+  'app-server',
+  '-c',
+  'tools.update_plan.enabled=true',
+  '--listen',
+  'stdio://',
+]);
 
 export function buildCodexLaunchSpec(
   options: BuildCodexLaunchSpecOptions,

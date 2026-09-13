@@ -17,7 +17,13 @@ describe('buildCodexLaunchSpec', () => {
     });
 
     expect(spec.command).toBe('C:\\Users\\user\\AppData\\Roaming\\npm\\codex.exe');
-    expect(spec.args).toEqual(['app-server', '--listen', 'stdio://']);
+    expect(spec.args).toEqual([
+      'app-server',
+      '-c',
+      'tools.update_plan.enabled=true',
+      '--listen',
+      'stdio://',
+    ]);
     expect(spec.spawnCwd).toBe('C:\\repo');
     expect(spec.targetCwd).toBe('C:\\repo');
     expect(spec.target).toMatchObject({
@@ -51,6 +57,8 @@ describe('buildCodexLaunchSpec', () => {
       '/mnt/c/repo',
       'codex',
       'app-server',
+      '-c',
+      'tools.update_plan.enabled=true',
       '--listen',
       'stdio://',
     ]);
@@ -86,6 +94,8 @@ describe('buildCodexLaunchSpec', () => {
       '/mnt/c/repo',
       'codex',
       'app-server',
+      '-c',
+      'tools.update_plan.enabled=true',
       '--listen',
       'stdio://',
     ]);
