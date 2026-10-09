@@ -6,7 +6,7 @@ set -euo pipefail
 
 VAULT="$(cd "$(dirname "$0")/../../.." && pwd)"          # vault 根目录
 PLUGIN_DIR="$VAULT/.obsidian/plugins/realclaudian"
-BUILD_DIR="/tmp/claudian-fork"                            # fork 构建目录
+BUILD_DIR="${CLAUDAIN_BUILD_DIR:-/tmp/claudian-fork}"     # fork 构建目录（可用环境变量覆盖）
 STAMP="dsh-$(date +%Y%m%d)"
 
 if [[ "${1:-}" == "--rollback" ]]; then

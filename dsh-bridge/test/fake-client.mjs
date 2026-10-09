@@ -6,11 +6,12 @@ import { spawn } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 const BIN = process.env.DSH_BIN ?? "dsh";
 const VAULT = process.env.VAULT ?? process.cwd();
 const TASK = process.env.TASK ?? "用 bash 运行 `pwd` 并打印结果，不要做别的事。";
+const IMAGE_PATH = process.env.IMAGE_PATH ?? "";
 
 const configPath = join(tmpdir(), `dsh-bridge-config-${Date.now()}.json`);
 writeFileSync(configPath, JSON.stringify({
@@ -22,6 +23,7 @@ writeFileSync(configPath, JSON.stringify({
 const child = spawn(BIN, ["--profile", "bridge", "--config", configPath], {
 	cwd: VAULT,
 	stdio: ["pipe", "pipe", "pipe"],
+	shell: process.platform === "win32",
 });
 child.stderr.on("data", (d) => process.stderr.write(`[bridge-stderr] ${d}`));
 
@@ -63,12 +65,21 @@ try {
 	const sessionId = created.result.sessionId;
 
 	await request("session/set_mode", { sessionId, modeId: "claudian-yolo" });
-	await request("session/set_model", { sessionId, modelId: "deepseek-v4-flash" });
+	await request("session/set_model", { sessionId, modelId: "deepseek-flash" });
 
 	console.log("--- prompt stream ---");
+	const content = [{ type: "text", text: TASK }];
+	if (IMAGE_PATH !== "") {
+		content.push({
+			type: "image",
+			mimeType: "image/png",
+			data: readFileSync(IMAGE_PATH).toString("base64"),
+			name: basename(IMAGE_PATH),
+		});
+	}
 	const prompt = await request("session/prompt", {
 		sessionId,
-		prompt: [{ type: "text", text: TASK }],
+		prompt: content,
 	});
 	console.log("\n--- prompt response ---");
 	console.log(JSON.stringify(prompt.result));

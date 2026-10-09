@@ -9,8 +9,6 @@
 //  - server→client: session/update notifications; session/request_permission
 //    requests when the safe mode needs a decision.
 
-import { MODELS } from "./session-manager.js";
-
 const EFFORTS = [
 	{ name: "Default", value: "default" },
 	{ name: "Off", value: "off" },
@@ -71,7 +69,7 @@ export class AcpSessionBridge {
 				type: "select",
 				name: "Model",
 				currentValue: entry.selection.current.model,
-				options: MODELS.map((m) => ({ name: m.label, value: m.id })),
+				options: this.manager.modelEntries().map((m) => ({ name: m.label ?? m.id, value: m.id })),
 			},
 			{
 				id: "mode",
@@ -198,6 +196,27 @@ export class AcpSessionBridge {
 						used: (data.usage.inputTokens ?? 0) + (data.usage.outputTokens ?? 0),
 					});
 				}
+				// 0.2.x delivers the assistant turn as one message carrying typed
+				// content blocks (the rc.6 `assistant/chunk` stream is gone), so
+				// text and reasoning are replayed as ACP chunks here.
+				const message = data.message ?? {};
+				const messageId = message.id ?? `a-${data.turn ?? 0}`;
+				for (const block of Array.isArray(message.content) ? message.content : []) {
+					if (!block || typeof block.text !== "string" || block.text === "") continue;
+					if (block.type === "text") {
+						this.notify(entry, {
+							sessionUpdate: "agent_message_chunk",
+							messageId,
+							content: { type: "text", text: block.text },
+						});
+					} else if (block.type === "reasoning") {
+						this.notify(entry, {
+							sessionUpdate: "agent_thought_chunk",
+							messageId,
+							content: { type: "text", text: block.text },
+						});
+					}
+				}
 				return;
 			}
 			case "session/title": {
@@ -248,16 +267,28 @@ export class AcpSessionBridge {
 }
 
 export function registerAcpMethods({ transport, manager, bridge, log }) {
-	transport.handle("initialize", async () => ({
-		protocolVersion: 1,
-		agentInfo: { name: "deepseek-harness", version: "0.1.0" },
-		agentCapabilities: {
-			loadSession: true,
-			sessionCapabilities: { list: false, resume: false, close: false, fork: false },
-			promptCapabilities: { image: false },
-		},
-		authMethods: [],
-	}));
+	// Image admittance is decided once per connection (ACP capability
+	// negotiation) and re-checked against the session's model before each
+	// image-carrying prompt.
+	let imageEnabled = false;
+
+	transport.handle("initialize", async () => {
+		// The catalog must be live before capability is judged: the default
+		// model — and therefore image support — is read from it.
+		await manager.ensureModels();
+		imageEnabled = await manager.supportsImagePrompts();
+		log("initialize: image prompts =", imageEnabled);
+		return {
+			protocolVersion: 1,
+			agentInfo: { name: "deepseek-harness", version: "0.1.0" },
+			agentCapabilities: {
+				loadSession: true,
+				sessionCapabilities: { list: false, resume: false, close: false, fork: false },
+				promptCapabilities: { image: imageEnabled },
+			},
+			authMethods: [],
+		};
+	});
 
 	transport.handle("authenticate", async () => ({}));
 
@@ -267,6 +298,7 @@ export function registerAcpMethods({ transport, manager, bridge, log }) {
 			throw Object.assign(new Error("cwd is required"), { code: -32602 });
 		}
 		await manager.ensurePresetList();
+		await manager.ensureModels();
 		const entry = await manager.createNew({ cwd });
 		log("session/new ->", String(entry.sessionId));
 		return {
@@ -296,16 +328,31 @@ export function registerAcpMethods({ transport, manager, bridge, log }) {
 		if (!entry) {
 			throw Object.assign(new Error("Session not found"), { code: -32001 });
 		}
-		const text = (params.prompt ?? [])
+		const blocks = params.prompt ?? [];
+		const text = blocks
 			.filter((block) => block && block.type === "text")
 			.map((block) => block.text ?? "")
 			.join("\n\n")
 			.trim();
-		if (text === "") {
+		const images = [];
+		for (const block of blocks) {
+			if (!block || block.type !== "image") continue;
+			if (!imageEnabled) {
+				throw Object.assign(new Error("inline image prompts were not advertised by this connection"), { code: -32602 });
+			}
+			images.push(manager.decodeImage(block));
+		}
+		if (text === "" && images.length === 0) {
 			return { stopReason: "end_turn", usage: null };
 		}
-		log("prompt ->", String(entry.sessionId), "(", text.length, "chars )");
-		await manager.runTurn(entry, text);
+		if (images.length > 0 && !(await manager.supportsImageForModel(entry.selection.current.model))) {
+			throw Object.assign(
+				new Error(`model "${entry.selection.current.model}" does not declare image input`),
+				{ code: -32602 },
+			);
+		}
+		log("prompt ->", String(entry.sessionId), "(", text.length, "chars,", images.length, "images )");
+		await manager.runTurn(entry, text, images);
 		await manager.drain(entry);
 		await manager.flush(entry);
 		const cancelled = entry.lastTurnReason === "cancelled";
@@ -330,6 +377,10 @@ export function registerAcpMethods({ transport, manager, bridge, log }) {
 			throw Object.assign(new Error("Session not found"), { code: -32001 });
 		}
 		const model = params.modelId ?? params.model ?? params.id;
+		await manager.ensureModels();
+		if (typeof model === "string" && !manager.modelEntries().some((m) => m.id === model)) {
+			throw Object.assign(new Error(`Unknown model "${model}". Valid: ${manager.modelEntries().map((m) => m.id).join(", ")}`), { code: -32602 });
+		}
 		if (typeof model === "string") manager.setModel(entry, model);
 		return { configOptions: bridge.configOptions(entry) };
 	});
@@ -353,7 +404,14 @@ export function registerAcpMethods({ transport, manager, bridge, log }) {
 		}
 		const configId = String(params.configId ?? params.id ?? "").toLowerCase();
 		const value = params.value;
+		await manager.ensureModels();
 		if (typeof value === "string") {
+			if (configId === "model" && !manager.modelEntries().some((m) => m.id === value)) {
+				throw Object.assign(new Error(`Unknown model "${value}". Valid: ${manager.modelEntries().map((m) => m.id).join(", ")}`), { code: -32602 });
+			}
+			if ((configId === "effort" || configId === "thought_level") && !EFFORTS.some((e) => e.value === value)) {
+				throw Object.assign(new Error(`Unknown reasoning effort "${value}". Valid: ${EFFORTS.map((e) => e.value).join(", ")}`), { code: -32602 });
+			}
 			if (configId === "model") manager.setModel(entry, value);
 			else if (configId === "mode") manager.setPreset(entry, value);
 			else if (configId === "permission") manager.setMode(entry, value);

@@ -19,6 +19,7 @@ writeFileSync(configPath, JSON.stringify({ systemPromptPath: "", vaultPath: VAUL
 const child = spawn(BIN, ["--profile", "bridge", "--config", configPath], {
 	cwd: VAULT,
 	stdio: ["pipe", "pipe", "pipe"],
+	shell: process.platform === "win32",
 });
 child.stderr.on("data", (d) => process.stderr.write(`[bridge-stderr] ${d}`));
 

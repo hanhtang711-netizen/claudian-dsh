@@ -90,14 +90,26 @@
   disabled: true
 
 - insert:
-    # Code Mode is a core execution capability, not a Web component.
-    - id: code-runtime
-      name: '@deepseek-ai/dsh-code-runtime-worker-thread'
-
     - id: agent-presets
-      name: '@deepseek-ai/dsh-agent-presets'
+      name: '@deepseek-ai/dsh-agent-preset-registry'
       config:
         default: standard
+
+    # Host-scope row the Web bundle supplies; the shipped presets' subagent
+    # tools read it. Required for the standard/ptc/cordis presets to mount on
+    # a non-Web surface.
+    - id: subagent-model-selection-settings
+      name: '@deepseek-ai/dsh-tool-subagent/model-selection-settings'
+
+    # Host runner providing the `cordisInspect` service the `cordis` preset's
+    # tool-cordis row injects (Web parity).
+    - id: cordis-host-runner
+      name: '@deepseek-ai/dsh-cordis-host-runner'
+
+    # Process-global Host inspect providers the `cordis` preset's tool-cordis
+    # row reads (Web parity; registry rejects duplicate ids).
+    - id: cordis-inspect-providers
+      name: '@deepseek-ai/dsh-tool-cordis/host'
 
     # Parses `--config <path>` and publishes it for the server below.
     - id: bridge-startup

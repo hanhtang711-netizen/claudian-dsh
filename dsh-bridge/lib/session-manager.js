@@ -16,12 +16,14 @@ import { installModelSelection } from "@deepseek-ai/dsh-agent";
 export const PROVIDER = "deepseek-official";
 
 export const MODELS = [
+	{ id: "deepseek-flash", label: "DeepSeek V41 Flash" },
 	{ id: "deepseek-v4-pro", label: "DeepSeek V4 Pro" },
-	{ id: "deepseek-v4-flash", label: "DeepSeek V4 Flash" },
 ];
 
 const EFFORTS = ["default", "off", "high", "max"];
-const DEFAULT_MODEL = "deepseek-v4-flash";
+const DEFAULT_MODEL = "deepseek-flash";
+/** Raster formats the harness attachment store admits for prompt images. */
+const IMAGE_MEDIA_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
 
 /** Fallback preset catalog when the agentPresets service is unavailable. */
 export const PRESET_FALLBACKS = [
@@ -55,6 +57,77 @@ export class BridgeSessionManager {
 		this.log = log;
 		this.sessions = new Map();
 		this.presetList = null;
+		this.models = null;
+		this.modelsReady = null;
+	}
+
+	/** Live model catalog from the llm service; static list until it resolves. */
+	modelEntries() {
+		return this.models ?? MODELS;
+	}
+
+	/** Refresh the model catalog once; safe to await from any async path. */
+	ensureModels() {
+		if (!this.modelsReady) this.modelsReady = this.refreshModels();
+		return this.modelsReady;
+	}
+
+	async refreshModels() {
+		const llm = this.ctx.get("llm");
+		if (!llm || typeof llm.listModels !== "function") return;
+		try {
+			const listed = await llm.listModels(PROVIDER);
+			if (Array.isArray(listed) && listed.length > 0) {
+				this.models = listed.map((m) => ({
+					id: String(m.id),
+					label: String(m.name ?? m.id),
+				}));
+				this.log("model catalog:", this.models.map((m) => m.id).join(", "));
+			}
+		} catch (error) {
+			this.log("model catalog unavailable, keeping static list:", error?.message ?? error);
+		}
+	}
+
+	/** True when one exact model route declares image input. */
+	async supportsImageForModel(modelId) {
+		const attachments = this.ctx.get("attachments");
+		if (!attachments) return false;
+		const limits = attachments.imageLimits;
+		if (!limits || !Array.isArray(limits.mediaTypes)) return false;
+		if (!limits.mediaTypes.some((mediaType) => IMAGE_MEDIA_TYPES.includes(mediaType))) return false;
+		const llm = this.ctx.get("llm");
+		if (!llm || typeof llm.resolveModelInfo !== "function") return false;
+		try {
+			const info = await llm.resolveModelInfo(PROVIDER, modelId);
+			return info?.inputModalities?.includes("image") === true;
+		} catch (error) {
+			this.log("image capability check failed for", modelId, ":", error?.message ?? error);
+			return false;
+		}
+	}
+
+	/** True when this deployment can truthfully advertise inline image prompts. */
+	async supportsImagePrompts() {
+		return this.supportsImageForModel(this.modelEntries()[0]?.id ?? DEFAULT_MODEL);
+	}
+
+	/** Validate one ACP image block into a save-ready attachment. */
+	decodeImage(block) {
+		const mediaType = String(block.mimeType ?? "").trim().toLowerCase();
+		if (!IMAGE_MEDIA_TYPES.includes(mediaType)) {
+			throw Object.assign(new Error(`image mimeType must be one of ${IMAGE_MEDIA_TYPES.join(", ")}`), { code: -32602 });
+		}
+		const data = String(block.data ?? "").trim();
+		if (data === "") {
+			throw Object.assign(new Error("image data is required"), { code: -32602 });
+		}
+		const bytes = Buffer.from(data, "base64");
+		if (bytes.length === 0 || bytes.toString("base64") !== data) {
+			throw Object.assign(new Error("image data must be canonical base64"), { code: -32602 });
+		}
+		const name = typeof block.name === "string" && block.name.trim() !== "" ? block.name.trim() : undefined;
+		return name === undefined ? { data: bytes, mediaType } : { data: bytes, mediaType, name };
 	}
 
 	find(rawId) {
@@ -98,7 +171,11 @@ export class BridgeSessionManager {
 	}
 
 	makeSelection(model, effort) {
-		const current = { provider: PROVIDER, model: model ?? DEFAULT_MODEL };
+		const entries = this.modelEntries();
+		const fallback = entries.some((m) => m.id === DEFAULT_MODEL)
+			? DEFAULT_MODEL
+			: entries[0]?.id ?? DEFAULT_MODEL;
+		const current = { provider: PROVIDER, model: model ?? fallback };
 		if (effort && effort !== "default") current.reasoningEffort = effort;
 		return { current, assembled: undefined };
 	}
@@ -227,11 +304,21 @@ export class BridgeSessionManager {
 		return entry;
 	}
 
-	async runTurn(entry, text) {
+	async runTurn(entry, text, images = []) {
 		entry.lastTurnReason = undefined;
 		await this.ensureAgent(entry);
+		const content = [];
+		if (text !== "") content.push({ type: "text", text });
+		if (images.length > 0) {
+			const attachments = this.ctx.get("attachments");
+			if (!attachments || typeof attachments.saveImages !== "function") {
+				throw Object.assign(new Error("no attachment store is mounted"), { code: -32602 });
+			}
+			const refs = await attachments.saveImages(images);
+			for (const ref of refs) content.push({ type: "image", attachment: ref });
+		}
 		entry.agent.followup(createUserMessage({
-			content: [{ type: "text", text }],
+			content,
 			source: { kind: "user" },
 		}));
 		await entry.agent.whenIdle();
@@ -272,7 +359,7 @@ export class BridgeSessionManager {
 	}
 
 	setModel(entry, model) {
-		if (MODELS.some((m) => m.id === model)) {
+		if (this.modelEntries().some((m) => m.id === model)) {
 			entry.selection.current = { ...entry.selection.current, model };
 		}
 	}
