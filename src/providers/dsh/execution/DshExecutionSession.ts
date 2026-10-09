@@ -16,6 +16,7 @@ import type { ChatMessage } from '@/core/types';
 import {
   AcpExecutionEventNormalizer,
   type AcpSessionNotification,
+  type AcpSetSessionModelResponse,
   buildAcpUsageInfo,
   extractAcpSessionModeState,
   extractAcpSessionThoughtLevelState,
@@ -171,6 +172,8 @@ export class DshExecutionSession implements ProviderExecutionSession {
   private disposed = false;
   private lifecycleGeneration = 0;
   private sessionEventSequence = 0;
+  /** Last `requested->applied` model mismatch already reported, to avoid spam. */
+  private lastModelMismatch: string | null = null;
 
   constructor(
     private readonly plugin: ProviderHost,
@@ -432,9 +435,11 @@ export class DshExecutionSession implements ProviderExecutionSession {
     let normalizer = this.runNormalizers.get(run);
     if (!normalizer) {
       normalizer = new AcpExecutionEventNormalizer({
+        // No explicit model here: StreamController backfills the authoritative
+        // active model (resolveConversationModel). Passing the legacy global
+        // settings.model leaked "haiku" into usage.model on every DSH turn.
         mapUsage: (usage) => buildAcpUsageInfo({
           contextWindow: usage,
-          model: this.resolveSelectedRawModelId(undefined) ?? undefined,
           promptUsage: null,
         }),
         scope: {
@@ -458,10 +463,11 @@ export class DshExecutionSession implements ProviderExecutionSession {
       request.configuration.model,
     );
     if (selectedModel) {
-      await kernel.setModel({
+      const applied = await kernel.setModel({
         modelId: decodeDshModelId(selectedModel) ?? selectedModel,
         sessionId: native.sessionId,
       });
+      this.verifyAppliedModel(selectedModel, applied);
     }
 
     const thoughtState = extractAcpSessionThoughtLevelState({
@@ -524,11 +530,36 @@ export class DshExecutionSession implements ProviderExecutionSession {
   }
 
   private resolveSelectedRawModelId(explicit?: string): string | null {
-    const selection = explicit
-      ?? (typeof this.plugin.settings.model === 'string'
-        ? this.plugin.settings.model
-        : '');
+    // Only ever trust an explicitly provided selection. The former fallback to
+    // the legacy global settings.model is not a valid DSH model source and
+    // leaked stale ids (e.g. "haiku") into set_model requests and usage info.
+    const selection = typeof explicit === 'string' ? explicit : '';
     return decodeDshModelId(selection) ?? (selection || null);
+  }
+
+  /**
+   * The bridge answers `session/set_model` with the selection it actually
+   * holds. A mismatch means the requested id was rejected — previously that
+   * happened silently and the session kept running on the bridge default, so
+   * surface it instead of assuming the request took effect.
+   */
+  private verifyAppliedModel(
+    requested: string,
+    response: AcpSetSessionModelResponse | null | undefined,
+  ): void {
+    const applied = (response?.configOptions ?? []).find(
+      (option) => option.id === 'model' || option.category === 'model',
+    )?.currentValue;
+    if (typeof applied !== 'string' || applied === '') return;
+    const wanted = decodeDshModelId(requested) ?? requested;
+    if (applied === wanted) return;
+    const signature = `${wanted}->${applied}`;
+    if (this.lastModelMismatch === signature) return;
+    this.lastModelMismatch = signature;
+    console.warn(
+      `[claudian:dsh] model "${wanted}" was not applied; the session is running "${applied}".`,
+    );
+    this.plugin.notifyProviderChatOptionsChanged('dsh');
   }
 
   private cancelRun(run: DshExecutionRun): void {

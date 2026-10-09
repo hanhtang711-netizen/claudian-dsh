@@ -34,8 +34,8 @@ export const DEFAULT_DSH_PROVIDER_SETTINGS: Readonly<PersistedDshProviderSetting
   environmentVariables: '',
   selectedMode: '',
   visibleModels: [
+    'dsh:deepseek-flash',
     'dsh:deepseek-v4-pro',
-    'dsh:deepseek-v4-flash',
   ],
 });
 

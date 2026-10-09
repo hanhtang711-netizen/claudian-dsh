@@ -330,6 +330,12 @@ export interface AcpSetSessionModelRequest {
 
 export interface AcpSetSessionModelResponse {
   _meta?: AcpMetadata | null;
+  /**
+   * Optional post-apply configuration state. Servers that answer with the
+   * resulting selection let a client detect a rejected model id instead of
+   * assuming the request took effect; servers that omit it stay supported.
+   */
+  configOptions?: AcpSessionConfigOption[] | null;
 }
 
 export type AcpSetSessionConfigOptionRequest =

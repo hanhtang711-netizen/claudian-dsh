@@ -8,17 +8,17 @@ export const DSH_MODEL_PREFIX = 'dsh:';
 
 /**
  * Built-in DSH model catalog. No discovery and no variants: the bridge
- * accepts raw model ids (`deepseek-v4-pro` / `deepseek-v4-flash`) and
+ * accepts raw model ids (`deepseek-flash` / `deepseek-v4-pro`) and
  * reports its own options per session.
  */
 export const DSH_BUILT_IN_MODELS: ReadonlyArray<DshModelInfo> = Object.freeze([
   {
-    displayName: 'DeepSeek V4 Pro',
-    id: 'deepseek-v4-pro',
+    displayName: 'DeepSeek V41 Flash',
+    id: 'deepseek-flash',
   },
   {
-    displayName: 'DeepSeek V4 Flash',
-    id: 'deepseek-v4-flash',
+    displayName: 'DeepSeek V4 Pro',
+    id: 'deepseek-v4-pro',
   },
 ]);
 
