@@ -15,7 +15,7 @@ export interface TabBarCallbacks {
   /** Called when a tab badge is clicked. */
   onTabClick: (tabId: TabId) => void;
 
-  /** Called when a tab is closed from its menu or by middle click. */
+  /** Called when a tab is closed by right/middle click or from its menu. */
   onTabClose: (tabId: TabId) => void;
 
   /** Called when the user renames a tab (a normalized label) or resets its name (null). */
@@ -211,8 +211,12 @@ export class TabBar {
 
     badgeEl.addEventListener('contextmenu', (e) => {
       e.preventDefault();
+      e.stopPropagation();
       const item = this.#findItem(tabId);
-      if (item) this.#openBadgeMenu(item, e);
+      if (!item) return;
+      // Keep the legacy two-finger/right-click close; Shift retains the editing menu.
+      if (e.shiftKey) this.#openBadgeMenu(item, e);
+      else if (item.canClose) this.callbacks.onTabClose(tabId);
     });
 
     // Suppress middle-button autoscroll so the click can close the tab instead.

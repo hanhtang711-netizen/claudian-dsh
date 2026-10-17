@@ -39,7 +39,7 @@ function setup(items: TabBarItem[] = [item(), item({ id: 'tab-2', index: 2, titl
 
 function openMenu(badge: HTMLElement): MockMenu {
   (Menu as unknown as { instances: Menu[] }).instances.length = 0;
-  fireEvent.contextMenu(badge);
+  fireEvent.contextMenu(badge, { shiftKey: true });
   const instances = (Menu as unknown as { instances: MockMenu[] }).instances;
   expect(instances).toHaveLength(1);
   expect(instances[0].showAtMouseEvent).toHaveBeenCalled();
@@ -70,7 +70,7 @@ afterEach(() => {
 });
 
 describe('TabBar tab labels', () => {
-  it('renders badges as native buttons whose context menu replaces right-click close', async () => {
+  it('closes tabs on right click and keeps the menu on Shift-right-click', async () => {
     const { container, callbacks, ui } = setup([
       item(),
       item({ id: 'tab-2', index: 2, title: 'Pinned session', canClose: false }),
@@ -80,6 +80,17 @@ describe('TabBar tab labels', () => {
     expect(closeable.getAttribute('type')).toBe('button');
     expect(await axe(container)).toHaveNoViolations();
 
+    const instances = (Menu as unknown as { instances: MockMenu[] }).instances;
+    instances.length = 0;
+    const rightClick = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 });
+    fireEvent(closeable, rightClick);
+    expect(rightClick.defaultPrevented).toBe(true);
+    expect(callbacks.onTabClose).toHaveBeenCalledTimes(1);
+    expect(callbacks.onTabClose).toHaveBeenCalledWith('tab-1');
+    expect(callbacks.onTabClick).not.toHaveBeenCalled();
+    expect(instances).toHaveLength(0);
+    callbacks.onTabClose.mockClear();
+
     const menu = openMenu(closeable);
     expect(callbacks.onTabClose).not.toHaveBeenCalled();
     expect(menuTitles(menu)).toEqual(['Rename tab…', 'Show title', 'Close tab']);
@@ -87,6 +98,11 @@ describe('TabBar tab labels', () => {
     expect(callbacks.onTabClose).toHaveBeenCalledWith('tab-1');
 
     const pinned = ui.getByRole('button', { name: 'Pinned session, idle' });
+    callbacks.onTabClose.mockClear();
+    instances.length = 0;
+    fireEvent.contextMenu(pinned);
+    expect(callbacks.onTabClose).not.toHaveBeenCalled();
+    expect(instances).toHaveLength(0);
     expect(menuTitles(openMenu(pinned))).toEqual(['Rename tab…', 'Show title']);
   });
 
