@@ -59,6 +59,25 @@ afterEach(() => {
 });
 
 describe('ChatPresentationPlacement', () => {
+  it('keeps an account accessory immediately above the composer, below navigation, across tab changes', () => {
+    const first = createPlacedTab('tab-1');
+    const second = createPlacedTab('tab-2');
+    let active = first.tab;
+    const placement = new ChatPresentationPlacement({ getActiveTab: () => active, isWide: () => false, getTabCount: () => 2 });
+    const panel = document.body.createDiv();
+    const accessory = document.createElement('div');
+    const accessoryMount = placement.mount.bind(placement) as (panel: HTMLElement, accessory?: HTMLElement) => void;
+    accessoryMount(panel, accessory);
+    placement.update();
+    const slot = panel.querySelector('.claudian-active-input-slot')!;
+    expect(slot.previousElementSibling).toBe(accessory);
+    expect(accessory.previousElementSibling).toBe(panel.querySelector('.claudian-view-input-nav-row'));
+    active = second.tab;
+    placement.update();
+    expect(slot.previousElementSibling).toBe(accessory);
+    expect(second.dom.inputComposerEl.parentElement).toBe(slot);
+  });
+
   it('moves only the active tab composer into the stable input slot', () => {
     const first = createPlacedTab('tab-1');
     const second = createPlacedTab('tab-2');

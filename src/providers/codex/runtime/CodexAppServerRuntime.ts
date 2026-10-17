@@ -8,6 +8,7 @@ import { getCodexProviderSettings } from '../settings';
 import { CodexAppServerProcess } from './CodexAppServerProcess';
 import { initializeCodexAppServerTransport, resolveCodexAppServerLaunchSpec } from './codexAppServerSupport';
 import type { CodexLaunchSpec } from './codexLaunchTypes';
+import { CodexRateLimitStore } from './CodexRateLimitStore';
 import { CodexRPCTransport } from './CodexRPCTransport';
 import { type CodexRuntimeContext, createCodexRuntimeContext } from './CodexRuntimeContext';
 import { CodexThreadRouter } from './CodexThreadRouter';
@@ -23,6 +24,7 @@ export class CodexAppServerConnection {
   readonly process: CodexAppServerProcess;
   readonly transport: CodexRPCTransport;
   readonly threads: CodexThreadRouter;
+  readonly rateLimits = new CodexRateLimitStore();
   readonly initialized: Promise<CodexRuntimeContext>;
   readonly ready: Promise<void>;
   private pluginRefresh: Promise<void> | null = null;
@@ -51,6 +53,7 @@ export class CodexAppServerConnection {
       if (!this.shutdownPromise) this.stopped();
     });
     this.transport.onNotification('skills/changed', skillsChanged);
+    this.transport.onNotification('account/rateLimits/updated', payload => this.rateLimits.mergeFromPayload(payload));
     this.initialized = (async () => {
       process.start();
       transport.start();

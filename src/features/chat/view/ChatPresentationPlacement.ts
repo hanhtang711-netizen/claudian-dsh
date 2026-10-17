@@ -31,13 +31,14 @@ export class ChatPresentationPlacement {
   constructor(private readonly context: ChatPresentationContext) {}
 
   /** Builds the view-owned footer: chip slot, navigation row host, and composer slot. */
-  mount(chatPanelEl: HTMLElement): void {
+  mount(chatPanelEl: HTMLElement, composerAccessory?: HTMLElement): void {
     this.chatPanelEl = chatPanelEl;
     this.inputFooterEl = chatPanelEl.createDiv({ cls: 'claudian-input-footer' });
     this.sideChatChipHostEl = this.inputFooterEl.createDiv({ cls: 'claudian-side-chat-chip-slot' });
     this.inputNavRowHostEl = this.inputFooterEl.createDiv({
       cls: 'claudian-input-nav-row claudian-view-input-nav-row',
     });
+    if (composerAccessory) this.inputFooterEl.appendChild(composerAccessory);
     this.activeInputSlotEl = this.inputFooterEl.createDiv({ cls: 'claudian-active-input-slot' });
     this.navRowContentEl = null;
   }

@@ -13,6 +13,7 @@ import { CodexCLIResolver } from '../runtime/CodexCLIResolver';
 import { CodexModelCatalogCoordinator } from '../runtime/CodexModelCatalogCoordinator';
 import { CodexModelDiscoveryService } from '../runtime/CodexModelDiscoveryService';
 import { createCodexModels } from '../runtime/CodexModels';
+import { CodexRateLimitService } from '../runtime/CodexRateLimitService';
 import { getCodexProviderSettings } from '../settings';
 import { CodexSkillListingService } from '../skills/CodexSkillListingService';
 import { createCodexSettingsTabRenderer } from '../ui/CodexSettingsTab';
@@ -35,6 +36,7 @@ export async function createCodexWorkspaceServices(
   options: CodexWorkspaceServicesOptions = {},
 ): Promise<CodexWorkspaceServices> {
   const runtime = new CodexAppServerRuntime(plugin);
+  const rateLimitService = new CodexRateLimitService(runtime, () => getCodexProviderSettings(plugin.settings).enabled);
   const skillListProvider = options.skillListingService
     ?? new CodexSkillListingService(runtime);
   const modelCatalogCoordinator = options.modelCatalogCoordinator
@@ -53,6 +55,7 @@ export async function createCodexWorkspaceServices(
         getCodexProviderSettings(plugin.settings).enabled && !sessionsInvalidated
       ),
       beforeTransition: async () => {
+        rateLimitService.beginEnvironmentTransition();
         modelCatalog.beginTransition();
         modelCatalogCoordinator.beginEnvironmentTransition();
         skillListProvider.beginEnvironmentTransition();
@@ -72,6 +75,7 @@ export async function createCodexWorkspaceServices(
           modelCatalogCoordinator.endEnvironmentTransition();
           skillListProvider.endEnvironmentTransition();
           sessionArchive.endEnvironmentTransition();
+          rateLimitService.endEnvironmentTransition();
         }
       },
     });
@@ -80,6 +84,7 @@ export async function createCodexWorkspaceServices(
   const cliResolver = new CodexCLIResolver();
   return {
     commandCatalog,
+    rateLimitService,
     runtime,
     startRuntime: () => runtime.start(),
     onAgentSkillsChanged: () => commandCatalog.refresh(),
@@ -91,6 +96,7 @@ export async function createCodexWorkspaceServices(
     dispose() {
       if (disposePromise) return disposePromise;
       unregisterTransitionHook();
+      rateLimitService.dispose();
       disposePromise = Promise.all([
         modelCatalog.dispose(),
         modelCatalogCoordinator.dispose(),

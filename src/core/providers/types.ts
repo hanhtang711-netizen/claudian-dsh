@@ -353,7 +353,24 @@ export interface ProviderCommandLoader {
   ): Promise<ProviderCommandDiscoveryResult<SlashCommand>>;
 }
 
+/** Account-scoped quota, independent of the selected conversation provider. */
+export interface ProviderRateLimitState {
+  status: 'ready' | 'unavailable';
+  windows: Array<{
+    label: string;
+    remainingPercent: number;
+    usedPercent: number;
+    resetsAt: number | null;
+  }>;
+}
+
+export interface ProviderRateLimitService {
+  subscribe(listener: (state: ProviderRateLimitState) => void): () => void;
+  refresh(): Promise<void>;
+}
+
 export interface ProviderWorkspaceServices {
+  rateLimitService?: ProviderRateLimitService;
   startRuntime?(): Promise<void>;
   onAgentSkillsChanged?(): Promise<void> | void;
   commandCatalog?: ProviderCommandCatalog | null;

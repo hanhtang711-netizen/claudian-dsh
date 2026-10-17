@@ -3,6 +3,8 @@ import { ItemView, Notice, Scope, setIcon } from 'obsidian';
 
 import { StartupProfiler } from '@/core/performance/StartupProfiler';
 import { getHiddenCommandSet } from '@/core/providers/commands/hiddenCommands';
+import { ProviderRegistry } from '@/core/providers/ProviderRegistry';
+import { ProviderWorkspaceRegistry } from '@/core/providers/ProviderWorkspaceRegistry';
 import { DEFAULT_CHAT_PROVIDER_ID, type ProviderId } from '@/core/providers/types';
 import { VIEW_TYPE_CLAUDIAN } from '@/core/types';
 import type { ChatFeatureHost } from '@/features/chat/ChatFeatureHost';
@@ -24,6 +26,7 @@ import {
   scheduleAnimationFrame,
   type ScheduledAnimationFrame,
 } from '@/features/chat/utils/animationFrame';
+import { AccountQuotaDashboard } from '@/features/chat/view/AccountQuotaDashboard';
 import { ChatPresentationPlacement } from '@/features/chat/view/ChatPresentationPlacement';
 import { DualPaneLayout, type DualPaneLayoutElements } from '@/features/chat/view/DualPaneLayout';
 import type { ZenModeSlots, ZenModeSource, ZenPresentationPort } from '@/features/chat/zen/types';
@@ -36,6 +39,8 @@ type LoadableView = {
 
 export class ClaudianView extends ItemView implements ZenModeSource {
   private plugin: ChatFeatureHost;
+  private quotaHost: HTMLElement | null = null;
+  private quotaDashboard: AccountQuotaDashboard | null = null;
 
   // Tab management
   private tabManager: TabManager | null = null;
@@ -175,6 +180,7 @@ export class ClaudianView extends ItemView implements ZenModeSource {
 
   /** Refreshes model-dependent UI across all tabs (used after settings/env changes). */
   refreshModelSelector(changedProviderId?: ProviderId): void {
+    this.quotaDashboard?.setVisible(ProviderRegistry.isEnabled('codex', this.plugin.settings));
     this.tabManager?.reconcileProviderAvailability();
     for (const tab of this.tabManager?.getAllTabs() ?? []) {
       const providerId = getSessionProviderId(tab, this.plugin);
@@ -340,10 +346,14 @@ export class ClaudianView extends ItemView implements ZenModeSource {
     this.wireEventHandlers();
     this.startZenModeSource();
     await this.tabWorkspace.completeOpen(opening);
+    void this.startQuotaDashboard(lifecycleRevision);
   }
 
   async onClose() {
     const lifecycleRevision = this.tabWorkspace.beginClose();
+    this.quotaDashboard?.dispose();
+    this.quotaDashboard = null;
+    this.quotaHost = null;
     // Zen presentation returns synchronously before asynchronous shutdown proceeds.
     this.stopZenModeSource();
     const tabManager = this.tabManager;
@@ -393,10 +403,24 @@ export class ClaudianView extends ItemView implements ZenModeSource {
   // UI Building
   // ============================================
 
+  private async startQuotaDashboard(revision: number): Promise<void> {
+    try {
+      await ProviderWorkspaceRegistry.ensureInitialized(this.plugin.providerHost, 'codex', 'account-quota');
+      if (!this.tabWorkspace.isCurrent(revision) || !this.quotaHost) return;
+      const service = ProviderWorkspaceRegistry.getServices('codex')?.rateLimitService;
+      if (!service) return;
+      this.quotaDashboard = new AccountQuotaDashboard(this.quotaHost, service);
+      this.quotaDashboard.setVisible(ProviderRegistry.isEnabled('codex', this.plugin.settings));
+    } catch {
+      // An unavailable optional account dashboard must not prevent chat restoration.
+    }
+  }
+
   private buildViewLayout(containerEl: HTMLElement): DualPaneLayoutElements {
     const chatPanelEl = containerEl.createDiv({ cls: 'claudian-chat-panel' });
     this.tabContentEl = chatPanelEl.createDiv({ cls: 'claudian-tab-content-container' });
-    this.presentation.mount(chatPanelEl);
+    this.quotaHost = chatPanelEl.createDiv({ cls: 'claudian-account-quota-host' });
+    this.presentation.mount(chatPanelEl, this.quotaHost);
 
     const resizerEl = containerEl.createDiv({ cls: 'claudian-session-resizer' });
     const sidebarEl = containerEl.createDiv({ cls: 'claudian-session-sidebar' });

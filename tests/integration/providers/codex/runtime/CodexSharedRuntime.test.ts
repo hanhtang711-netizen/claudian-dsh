@@ -13,6 +13,7 @@ import { CodexAppServerProcess } from '@/providers/codex/runtime/CodexAppServerP
 import { CodexAppServerRuntime } from '@/providers/codex/runtime/CodexAppServerRuntime';
 import { buildCodexLaunchSpec } from '@/providers/codex/runtime/CodexLaunchSpecBuilder';
 import { CodexModelDiscoveryService } from '@/providers/codex/runtime/CodexModelDiscoveryService';
+import { CodexRateLimitService } from '@/providers/codex/runtime/CodexRateLimitService';
 import { updateCodexProviderSettings } from '@/providers/codex/settings';
 import { CodexSkillListingService } from '@/providers/codex/skills/CodexSkillListingService';
 
@@ -160,6 +161,33 @@ describe('Codex shared runtime', () => {
     }
     throw new Error(`Missing ${method} on process ${processIndex}`);
   }
+
+  it('reads account quota and routes live quota events without starting a second server or closing the shared one', async () => {
+    mockAutoReconcile = true;
+    const runtime = createRuntime();
+    const models = new CodexModelDiscoveryService(plugin, runtime);
+    await models.discoverModels();
+    const quota = new CodexRateLimitService(runtime, () => true);
+    const listener = jest.fn();
+    const off = quota.subscribe(listener);
+    try {
+      const process = await waitForRequest('account/rateLimits/read');
+      const request = process.requests.find(request => request.method === 'account/rateLimits/read')!;
+      process.respond(request.id, { rateLimits: { primary: { usedPercent: 12, windowDurationMins: 300 } } });
+      for (let count = 0; count < 20; count++) await Promise.resolve();
+      expect(listener.mock.lastCall![0].windows[0].remainingPercent).toBe(88);
+      process.notify('account/rateLimits/updated', { rateLimits: { primary: { usedPercent: 24, windowDurationMins: 300 } } });
+      for (let count = 0; count < 20; count++) await Promise.resolve();
+      expect(listener.mock.lastCall![0].windows[0].remainingPercent).toBe(76);
+      expect(mockProcesses).toHaveLength(1);
+      off();
+      expect(process.isAlive()).toBe(true);
+      await models.discoverModels();
+      expect(mockProcesses).toHaveLength(1);
+    } finally {
+      off(); quota.dispose();
+    }
+  });
 
   it('shares skill and model discovery and waits for plugin readiness only for skills', async () => {
     const runtime = createRuntime();
