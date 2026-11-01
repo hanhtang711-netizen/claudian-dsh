@@ -584,7 +584,7 @@ describe('Codex shared runtime', () => {
         const process = await waitForRequest('turn/start', index);
         const spec = jest.mocked(CodexAppServerProcess).mock.calls.at(-1)![0];
         expect(spec.args).toEqual([
-          'app-server', '--listen', 'stdio://',
+          'app-server', '--listen', 'stdio://', '-c', 'tools.update_plan.enabled=true',
           ...(responseVerbosity === 'default' ? [] : ['-c', `model_verbosity="${responseVerbosity}"`]),
         ]);
         expect(process.requests.filter(r => r.method === 'thread/resume').map(r => r.params.threadId))

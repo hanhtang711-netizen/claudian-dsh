@@ -27,7 +27,7 @@ describe('buildCodexLaunchSpec', () => {
       hostPlatform: 'darwin' as const,
     };
     expect(buildCodexLaunchSpec(options).args).toEqual([
-      'app-server', '--listen', 'stdio://',
+      'app-server', '--listen', 'stdio://', '-c', 'tools.update_plan.enabled=true',
       ...(responseVerbosity === 'default' ? [] : ['-c', `model_verbosity="${responseVerbosity}"`]),
     ]);
     expect(buildCodexLaunchSpec({ ...options, cliArgs: ['--version'] }).args).toEqual(['--version']);
@@ -49,7 +49,7 @@ describe('buildCodexLaunchSpec', () => {
     });
 
     expect(spec.command).toBe('C:\\Users\\user\\AppData\\Roaming\\npm\\codex.exe');
-    expect(spec.args).toEqual(['app-server', '--listen', 'stdio://']);
+    expect(spec.args).toEqual(['app-server', '--listen', 'stdio://', '-c', 'tools.update_plan.enabled=true']);
     expect(spec.spawnCwd).toBe('C:\\repo');
     expect(spec.targetCwd).toBe('C:\\repo');
     expect(spec.target).toMatchObject({
@@ -98,6 +98,8 @@ describe('buildCodexLaunchSpec', () => {
       'app-server',
       '--listen',
       'stdio://',
+      '-c',
+      'tools.update_plan.enabled=true',
     ]);
     expect(spec.spawnCwd).toBe('C:\\repo');
     expect(spec.targetCwd).toBe('/mnt/c/repo');
@@ -133,6 +135,8 @@ describe('buildCodexLaunchSpec', () => {
       'app-server',
       '--listen',
       'stdio://',
+      '-c',
+      'tools.update_plan.enabled=true',
     ]);
     expect(spec.target.distroName).toBe('Ubuntu');
     expect(spec.pathMapper.toHostPath('/home/user/.codex/sessions')).toBe(
@@ -173,6 +177,8 @@ describe('buildCodexLaunchSpec', () => {
       'app-server',
       '--listen',
       'stdio://',
+      '-c',
+      'tools.update_plan.enabled=true',
     ]);
     expect(spec.target.distroName).toBe('Ubuntu-24.04');
     expect(spec.pathMapper.toHostPath('/home/user/.codex/sessions')).toBe(
