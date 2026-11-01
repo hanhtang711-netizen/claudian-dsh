@@ -50,6 +50,42 @@ describe('Composer input styles', () => {
 
   const style = (el: Element) => window.getComputedStyle(el);
 
+  it('keeps task text compact and monochrome without native button chrome', () => {
+    const nativeStyle = document.createElement('style');
+    nativeStyle.textContent = 'button:not(.clickable-icon) { background-color: rgba(255, 255, 255, 0.05); box-shadow: 0 1px 2px black; }';
+    document.head.appendChild(nativeStyle);
+    renderComposer();
+    const panel = document.createElement('section');
+    panel.className = 'claudian-task-panel';
+    panel.innerHTML = `<button type="button" class="claudian-task-panel-toggle">Tasks 0/1</button>
+      <ul class="claudian-task-panel-list"><li class="claudian-task-panel-item claudian-task-panel-in_progress">
+      <span class="claudian-task-panel-icon">•</span><span>Working</span></li></ul>`;
+    document.body.appendChild(panel);
+    expect(style(panel).getPropertyValue('border')).toBe('0px');
+    expect(style(panel).getPropertyValue('border-radius')).toBe('0');
+    expect(['rgba(0, 0, 0, 0)', 'transparent']).toContain(style(panel).backgroundColor);
+    const row = panel.querySelector('.claudian-task-panel-item')!;
+    expect(style(panel).fontSize).toBe('13px');
+    expect(style(panel).fontFamily).toBe('var(--font-monospace)');
+    expect(style(row).fontSize).toBe('12.5px');
+    const toggle = panel.querySelector('.claudian-task-panel-toggle')!;
+    expect(style(toggle).fontSize).toBe('13px');
+    expect(style(toggle).fontFamily).toBe('var(--font-monospace)');
+    expect(style(toggle).lineHeight).toBe('1.5');
+    expect(style(toggle).fontWeight).toBe('400');
+    expect(['rgba(0, 0, 0, 0)', 'transparent']).toContain(style(toggle).backgroundColor);
+    expect(style(toggle).boxShadow).toBe('none');
+    expect(style(row).lineHeight).toBe('1.4');
+    expect(style(row).getPropertyValue('color')).toBe('var(--text-normal)');
+    const icon = row.querySelector('.claudian-task-panel-icon')!;
+    expect(['inherit', style(row).color]).toContain(style(icon).color);
+    expect(style(row).alignItems).toBe('baseline');
+    row.classList.replace('claudian-task-panel-in_progress', 'claudian-task-panel-completed');
+    expect(style(row).color).toBe('var(--text-muted)');
+    expect(['inherit', style(row).color]).toContain(style(icon).color);
+    expect(style(panel.querySelector('.claudian-task-panel-list')!).maxHeight).toBe('180px');
+  });
+
   it('sizes the idle input box from its content instead of a fixed floor', () => {
     const composer = renderComposer();
     const wrapper = style(composer.querySelector('.claudian-input-wrapper')!);

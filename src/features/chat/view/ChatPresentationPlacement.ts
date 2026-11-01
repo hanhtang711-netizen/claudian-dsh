@@ -1,4 +1,5 @@
 import type { ChatTab, TabTranscriptPlacement } from '@/features/chat/tabs/ChatTab';
+import { CodexTaskPanel } from '@/features/chat/view/CodexTaskPanel';
 import type { ZenModeSlots } from '@/features/chat/zen/types';
 
 export interface ChatPresentationContext {
@@ -12,6 +13,7 @@ export interface ChatPresentationContext {
  * and side-chat chip live, in the view footer or in attached zen slots.
  */
 export class ChatPresentationPlacement {
+  private taskPanel: CodexTaskPanel | null = null;
   private chatPanelEl: HTMLElement | null = null;
   private inputFooterEl: HTMLElement | null = null;
   private sideChatChipHostEl: HTMLElement | null = null;
@@ -34,6 +36,8 @@ export class ChatPresentationPlacement {
   mount(chatPanelEl: HTMLElement, composerAccessory?: HTMLElement): void {
     this.chatPanelEl = chatPanelEl;
     this.inputFooterEl = chatPanelEl.createDiv({ cls: 'claudian-input-footer' });
+    this.taskPanel?.dispose();
+    this.taskPanel = new CodexTaskPanel(this.inputFooterEl);
     this.sideChatChipHostEl = this.inputFooterEl.createDiv({ cls: 'claudian-side-chat-chip-slot' });
     this.inputNavRowHostEl = this.inputFooterEl.createDiv({
       cls: 'claudian-input-nav-row claudian-view-input-nav-row',
@@ -57,6 +61,7 @@ export class ChatPresentationPlacement {
   /** Places the active composer in the footer slot, or the zen slot while zen owns presentation. */
   update(): void {
     const activeTab = this.context.getActiveTab();
+    this.taskPanel?.bind(activeTab);
     const activeInputSlotEl = this.activeInputSlotEl;
     if (!activeInputSlotEl) return;
     this.updateChip();
@@ -126,6 +131,8 @@ export class ChatPresentationPlacement {
 
   /** Returns the chip and the active composer to their tab-owned locations. */
   restoreAll(): void {
+    this.taskPanel?.dispose();
+    this.taskPanel = null;
     this.sideChatChipTab?.placement.setSideChatChipHost(null);
     this.sideChatChipTab?.placement.setSideChatFullHeightHost(null);
     this.sideChatChipTab = null;
