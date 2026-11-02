@@ -1,3 +1,5 @@
+import { setIcon } from 'obsidian';
+
 import type { TodoItem } from '@/core/tools/todo';
 import type { ChatMessage } from '@/core/types';
 import type { ChatTab } from '@/features/chat/tabs/ChatTab';
@@ -6,6 +8,7 @@ import type { ChatTab } from '@/features/chat/tabs/ChatTab';
 export class CodexTaskPanel {
   private readonly root: HTMLElement;
   private readonly toggle: HTMLButtonElement;
+  private readonly label: HTMLElement;
   private readonly list: HTMLElement;
   private tab: ChatTab | null = null;
   private unsubscribe: (() => void) | null = null;
@@ -20,7 +23,10 @@ export class CodexTaskPanel {
     this.toggle = this.root.createEl('button', {
       cls: 'claudian-task-panel-toggle', attr: { type: 'button', 'aria-expanded': 'true' },
     });
-    this.list = this.root.createEl('ul', { cls: 'claudian-task-panel-list' });
+    const icon = this.toggle.createSpan({ cls: 'claudian-tool-icon', attr: { 'aria-hidden': 'true' } });
+    setIcon(icon, 'list-checks');
+    this.label = this.toggle.createSpan({ cls: 'claudian-tool-name' });
+    this.list = this.root.createEl('ul', { cls: 'claudian-task-panel-list claudian-todo-list-container' });
     this.toggle.addEventListener('click', this.toggleExpanded);
   }
 
@@ -70,15 +76,13 @@ export class CodexTaskPanel {
     this.root.hidden = todos.length === 0;
     this.list.empty();
     const completed = todos.filter(todo => todo.status === 'completed').length;
-    this.toggle.setText(`Tasks ${completed}/${todos.length}`);
+    this.label.setText(`Tasks ${completed}/${todos.length}`);
     this.updateExpanded();
     for (const todo of todos) {
-      const item = this.list.createEl('li', { cls: `claudian-task-panel-item claudian-task-panel-${todo.status}` });
-      item.createSpan({
-        cls: 'claudian-task-panel-icon', text: todo.status === 'completed' ? '✓' : '•',
-        attr: { 'aria-label': todo.status.replace('_', ' ') },
-      });
-      item.createSpan({ text: todo.status === 'in_progress' ? todo.activeForm : todo.content });
+      const item = this.list.createEl('li', { cls: `claudian-todo-item claudian-todo-${todo.status}` });
+      const statusIcon = item.createSpan({ cls: 'claudian-todo-status-icon', attr: { 'aria-hidden': 'true' } });
+      setIcon(statusIcon, todo.status === 'completed' ? 'check' : 'dot');
+      item.createSpan({ cls: 'claudian-todo-text', text: todo.status === 'in_progress' ? todo.activeForm : todo.content });
     }
   }
 }

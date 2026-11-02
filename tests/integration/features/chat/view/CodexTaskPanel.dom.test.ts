@@ -4,6 +4,7 @@ import '@test/helpers/ObsidianSettingsDOM';
 import { testDate } from '@test/helpers/testClock';
 import { fireEvent, within } from '@testing-library/dom';
 import { axe } from 'jest-axe';
+import { setIcon } from 'obsidian';
 
 import type { ChatMessage, ToolCallInfo } from '@/core/types';
 import { ChatState } from '@/features/chat/state/ChatState';
@@ -59,7 +60,18 @@ it('restores tasks above conversation navigation and quota, and updates from the
   expect(ui.getByText('Tasks 1/3')).toBeDefined();
   expect(ui.getByText('Working 2')).toBeDefined();
   expect(ui.getByText('Task 3')).toBeDefined();
-  expect(Array.from(region.querySelectorAll('.claudian-task-panel-icon')).map(icon => icon.textContent)).toEqual(['✓', '•', '•']);
+  expect(setIcon).toHaveBeenCalledWith(region.querySelector('.claudian-tool-icon'), 'list-checks');
+  expect(region.querySelector('.claudian-tool-name')?.textContent).toBe('Tasks 1/3');
+  expect(region.querySelector('.claudian-todo-list-container')).not.toBeNull();
+  expect(region.querySelectorAll('.claudian-todo-item.claudian-todo-completed')).toHaveLength(1);
+  expect(region.querySelectorAll('.claudian-todo-item.claudian-todo-in_progress')).toHaveLength(1);
+  expect(region.querySelectorAll('.claudian-todo-item.claudian-todo-pending')).toHaveLength(1);
+  expect(region.querySelectorAll('.claudian-todo-status-icon')).toHaveLength(3);
+  const statusIcons = Array.from(region.querySelectorAll('.claudian-todo-status-icon'));
+  expect(setIcon).toHaveBeenCalledWith(statusIcons[0], 'check');
+  expect(setIcon).toHaveBeenCalledWith(statusIcons[1], 'dot');
+  expect(setIcon).toHaveBeenCalledWith(statusIcons[2], 'dot');
+  expect(region.querySelectorAll('.claudian-todo-text')).toHaveLength(3);
   const composer = h.panel.querySelector('.claudian-active-input-slot')!.firstElementChild;
   const toggle = ui.getByRole('button', { name: 'Tasks 1/3' });
   fireEvent.click(toggle);

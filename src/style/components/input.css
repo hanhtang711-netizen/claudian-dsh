@@ -307,9 +307,6 @@ button.claudian-input-nav-btn[aria-disabled='true'] {
   box-shadow: none;
   overflow: hidden;
   font-family: var(--font-monospace);
-  font-size: 13px;
-  font-weight: 400;
-  line-height: 1.4;
 }
 
 .claudian-task-panel .claudian-task-panel-toggle,
@@ -320,7 +317,7 @@ button.claudian-input-nav-btn[aria-disabled='true'] {
   height: auto;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   justify-content: flex-start;
   padding: 4px 0;
   border: 0;
@@ -328,15 +325,9 @@ button.claudian-input-nav-btn[aria-disabled='true'] {
   box-shadow: none;
   background-color: transparent;
   color: var(--text-normal);
-  font-family: var(--font-monospace);
-  font-size: 13px;
-  font-weight: 400;
-  line-height: 1.5;
   cursor: pointer;
 }
 
-.claudian-task-panel .claudian-task-panel-toggle::before { content: '▾'; }
-.claudian-task-panel .claudian-task-panel-toggle[aria-expanded="false"]::before { content: '▸'; }
 .claudian-task-panel .claudian-task-panel-toggle:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: -2px; }
 
 .claudian-task-panel-list {
@@ -347,7 +338,6 @@ button.claudian-input-nav-btn[aria-disabled='true'] {
   list-style: none;
 }
 
-.claudian-task-panel-item { display: flex; align-items: baseline; gap: 8px; padding: 1px 0; font-size: 12.5px; line-height: 1.4; color: var(--text-normal); overflow-wrap: anywhere; }
-.claudian-task-panel-icon { flex: 0 0 1em; font: inherit; line-height: inherit; color: inherit; text-align: center; }
-.claudian-task-panel-completed { color: var(--text-muted); }
+.claudian-task-panel .claudian-tool-icon { color: var(--text-accent); }
+.claudian-task-panel .claudian-todo-text { min-width: 0; overflow-wrap: anywhere; }
 .claudian-task-panel[hidden], .claudian-task-panel-list[hidden] { display: none; }
